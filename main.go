@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"log"
 	"log/slog"
 	"net/url"
@@ -16,6 +17,9 @@ import (
 )
 
 var version = "develop"
+
+//go:embed ui/dist/**/*
+var f embed.FS
 
 func main() {
 	err := godotenv.Load()
@@ -42,7 +46,7 @@ func main() {
 
 	http := server.NewServer(
 		server.WithPort(8080),
-		// server.WithPluginFS(f),
+		server.WithPluginFS(f),
 		server.WithPlugin(p),
 	)
 
