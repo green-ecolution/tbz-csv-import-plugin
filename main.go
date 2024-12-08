@@ -48,6 +48,7 @@ func main() {
 		server.WithPort(8080),
 		server.WithPluginFS(f),
 		server.WithPlugin(p),
+    server.WithVersion(version),
 	)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

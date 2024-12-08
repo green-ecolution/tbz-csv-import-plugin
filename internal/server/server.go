@@ -13,6 +13,7 @@ type ServerConfig struct {
 	port     int
 	plugin   plugin.Plugin
 	pluginFS embed.FS
+	version  string
 }
 
 type Server struct {
@@ -24,6 +25,12 @@ type ServerOption func(*ServerConfig)
 func WithPort(port int) ServerOption {
 	return func(cfg *ServerConfig) {
 		cfg.port = port
+	}
+}
+
+func WithVersion(version string) ServerOption {
+	return func(cfg *ServerConfig) {
+		cfg.version = version
 	}
 }
 
@@ -41,6 +48,7 @@ func WithPlugin(plugin plugin.Plugin) ServerOption {
 
 var defaultServerConfig = &ServerConfig{
 	port: 8080,
+  version: "develop",
 }
 
 func NewServer(opts ...ServerOption) *Server {
@@ -54,7 +62,9 @@ func NewServer(opts ...ServerOption) *Server {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	app := fiber.New(fiber.Config{})
+	app := fiber.New(fiber.Config{
+    AppName: fmt.Sprintf("%s (%s)", s.cfg.plugin.Name, s.cfg.version),
+  })
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Hello, World! This is the plugin server for " + s.cfg.plugin.Name)
 	})
