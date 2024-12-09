@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/url"
@@ -11,7 +12,9 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/green-ecolution/green-ecolution-backend/pkg/plugin"
+	"github.com/green-ecolution/green-ecolution-backend/client"
+	"github.com/green-ecolution/green-ecolution-backend/plugin"
+	"github.com/green-ecolution/tbz-csv-import-plugin/internal/importer"
 	"github.com/green-ecolution/tbz-csv-import-plugin/internal/server"
 	"github.com/joho/godotenv"
 )
@@ -48,14 +51,15 @@ func main() {
 		server.WithPort(8080),
 		server.WithPluginFS(f),
 		server.WithPlugin(p),
-    server.WithVersion(version),
+		server.WithVersion(version),
 	)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	//wg.Add(2)
+	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
@@ -74,11 +78,32 @@ func main() {
 		plugin.WithPlugin(p),
 		plugin.WithHostAPIVersion("v1"),
 	)
-
-	_, err = worker.Register(ctx, clientID, clientSecret)
 	if err != nil {
 		panic(err)
 	}
+
+	token, err := worker.Register(ctx, clientID, clientSecret)
+	if err != nil {
+		panic(err)
+	}
+
+	clientCfg := client.NewConfiguration()
+	clientCfg.Servers = client.ServerConfigurations{
+		{
+			URL:         fmt.Sprintf("%s/api", hostPathEnv),
+			Description: "Green Ecolution API",
+		},
+	}
+	clientCfg.Debug = true
+	clientCfg.AddDefaultHeader("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
+
+	repo := importer.NewGreenEcolutionRepo(clientCfg)
+	auth := context.WithValue(context.Background(), client.ContextOAuth2, token)
+	info, err := repo.GetInfo(auth)
+	if err != nil {
+		slog.Error("Error while getting app info", "error", err)
+	}
+	slog.Info("App info", "info", info)
 
 	go func() {
 		defer wg.Done()

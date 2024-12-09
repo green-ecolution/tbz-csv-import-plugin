@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/green-ecolution/green-ecolution-backend/pkg/plugin"
+	"github.com/green-ecolution/green-ecolution-backend/plugin"
 )
 
 type ServerConfig struct {
