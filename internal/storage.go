@@ -7,3 +7,6 @@ import (
 type GreenEcolutionRepo interface {
   GetInfo() client.ApiGetAppInfoRequest
 }
+
+type CsvRepo interface {
+}
