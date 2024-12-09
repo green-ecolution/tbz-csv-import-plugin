@@ -17,6 +17,7 @@ import (
 	"github.com/green-ecolution/tbz-csv-import-plugin/internal/importer"
 	"github.com/green-ecolution/tbz-csv-import-plugin/internal/server"
 	"github.com/joho/godotenv"
+	"golang.org/x/oauth2"
 )
 
 var version = "develop"
@@ -87,6 +88,14 @@ func main() {
 		panic(err)
 	}
 
+	oauthToken := &oauth2.Token{
+		AccessToken:  token.AccessToken,
+		RefreshToken: token.RefreshToken,
+		Expiry:       token.Expiry,
+		ExpiresIn:    token.ExpiresIn,
+		TokenType:    "Bearer",
+	}
+	oauthClient := oauth2.NewClient(ctx, oauth2.StaticTokenSource(oauthToken))
 	clientCfg := client.NewConfiguration()
 	clientCfg.Servers = client.ServerConfigurations{
 		{
@@ -95,10 +104,11 @@ func main() {
 		},
 	}
 	clientCfg.Debug = true
-	clientCfg.AddDefaultHeader("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
+	clientCfg.HTTPClient = oauthClient
 
 	repo := importer.NewGreenEcolutionRepo(clientCfg)
-	auth := context.WithValue(context.Background(), client.ContextOAuth2, token)
+
+	auth := context.WithValue(ctx, client.ContextOAuth2, oauthToken)
 	info, err := repo.GetInfo(auth)
 	if err != nil {
 		slog.Error("Error while getting app info", "error", err)
