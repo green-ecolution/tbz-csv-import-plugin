@@ -1,4 +1,4 @@
-package importer
+package storage
 
 import (
 	"context"
@@ -31,3 +31,5 @@ func (r *GreenEcolutionRepo) GetTrees(ctx context.Context) ([]client.Tree, error
 	}
 	return trees.Data, nil
 }
+
+

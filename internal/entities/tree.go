@@ -1,13 +1,21 @@
 package entities
 
 type TreeImport struct {
-	Area         string `validate:"required"`
-	Number       string `validate:"required"`
-	Species      string
-	Latitude     float64 `validate:"required,max=90,min=-90"`
-	Longitude    float64 `validate:"required,max=180,min=-180"`
-	PlantingYear int32   `validate:"gt=0"`
-	Street       string  `validate:"required"`
-	TreeID       int32
+	TreeID       TreeID           `db:"id"`
+	Area         TreeArea         `db:"area"`
+	Number       TreeNumber       `db:"tree_number"`
+	Species      TreeSpecies      `db:"species"`
+	Latitude     TreeLatitude     `db:"latitude"`
+	Longitude    TreeLongitude    `db:"longitude"`
+	PlantingYear TreePlantingYear `db:"planting_year"`
+	Street       TreeStreet       `db:"street"`
 }
 
+type TreeArea = string
+type TreeNumber = string
+type TreeSpecies = string
+type TreeLatitude = float64
+type TreeLongitude = float64
+type TreePlantingYear = int32
+type TreeStreet = string
+type TreeID = int32

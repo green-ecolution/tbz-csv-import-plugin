@@ -14,15 +14,17 @@ import (
 
 	"github.com/green-ecolution/green-ecolution-backend/client"
 	"github.com/green-ecolution/green-ecolution-backend/plugin"
-	"github.com/green-ecolution/tbz-csv-import-plugin/internal/importer"
+	"github.com/green-ecolution/tbz-csv-import-plugin/internal/importer/storage"
 	"github.com/green-ecolution/tbz-csv-import-plugin/internal/server"
+	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
+	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/oauth2"
 )
 
 var version = "develop"
 
-//go:embed ui/dist/**/*
+//go:embed all:ui/dist
 var f embed.FS
 
 func main() {
@@ -35,7 +37,7 @@ func main() {
 	clientSecret := os.Getenv("CLIENT_SECRET")
 	hostPathEnv := os.Getenv("HOST_PATH")
 
-	pluginPath, err := url.Parse("http://localhost:8080/")
+	pluginPath, err := url.Parse("http://localhost:8123/")
 	if err != nil {
 		panic(err)
 	}
@@ -49,7 +51,7 @@ func main() {
 	}
 
 	http := server.NewServer(
-		server.WithPort(8080),
+		server.WithPort(8123),
 		server.WithPluginFS(f),
 		server.WithPlugin(p),
 		server.WithVersion(version),
@@ -68,6 +70,14 @@ func main() {
 			slog.Error("Error while running http server", "error", err)
 		}
 	}()
+
+	db := sqlx.MustConnect("sqlite3", "file:import.db?cache=shared")
+	importRepo := storage.NewImportRepositoryDB(db)
+
+	if err = importRepo.Setup(); err != nil {
+		slog.Error("Failed to migrate database", "error", err)
+		panic(err)
+	}
 
 	hostPath, err := url.Parse(hostPathEnv)
 	if err != nil {
@@ -106,7 +116,7 @@ func main() {
 	clientCfg.Debug = true
 	clientCfg.HTTPClient = oauthClient
 
-	repo := importer.NewGreenEcolutionRepo(clientCfg)
+	repo := storage.NewGreenEcolutionRepo(clientCfg)
 
 	auth := context.WithValue(ctx, client.ContextOAuth2, oauthToken)
 	info, err := repo.GetInfo(auth)
