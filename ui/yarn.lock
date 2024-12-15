@@ -354,10 +354,10 @@
   dependencies:
     levn "^0.4.1"
 
-"@green-ecolution/plugin-interface@^0.0.2":
-  version "0.0.2"
-  resolved "https://npm.pkg.github.com/download/@green-ecolution/plugin-interface/0.0.2/cfe6f601473ae91adf6278f70d5750d3399d3d67#cfe6f601473ae91adf6278f70d5750d3399d3d67"
-  integrity sha512-bAcQ1nmb9FN8ZO3y5VGh3s8Ja+CrWSWKkvd2y7tiANPm4/DugW33aSMrIynqT14Dcf+AGlT0DOGg1+nuvQMhRg==
+"@green-ecolution/plugin-interface@^0.0.1":
+  version "0.0.1"
+  resolved "https://registry.yarnpkg.com/@green-ecolution/plugin-interface/-/plugin-interface-0.0.1.tgz#b12010b366f5866160728ac2519b8a9aecc1fe7a"
+  integrity sha512-rZdNQmRIWrgrfarneI3kGv6sIia6WS6e2wbgY9Vu9notwBa+9d4ulfN3k8LJEUl1ZltdjvlDwjXaqG+v3Ivecw==
 
 "@humanwhocodes/module-importer@^1.0.1":
   version "1.0.1"
