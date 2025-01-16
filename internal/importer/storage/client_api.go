@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/green-ecolution/green-ecolution-backend/client"
+	"github.com/green-ecolution/tbz-csv-import-plugin/internal/entities"
 )
 
 type GreenEcolutionRepo struct {
@@ -32,4 +33,46 @@ func (r *GreenEcolutionRepo) GetTrees(ctx context.Context) ([]client.Tree, error
 	return trees.Data, nil
 }
 
+func (r *GreenEcolutionRepo) CreateTrees(ctx context.Context, trees []*entities.Tree) error {
+	for _, tree := range trees {
+		_, _, err := r.client.TreeAPI.CreateTree(ctx).Body(client.TreeCreate{
+			Description:  "Dieser Baum wurde von einem CSV-Import erstellt.",
+			Latitude:     float32(tree.Latitude),
+			Longitude:    float32(tree.Longitude),
+			PlantingYear: tree.PlantingYear,
+			Species:      tree.Species,
+			TreeNumber:   tree.Number,
+		}).Execute()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+func (r *GreenEcolutionRepo) UpdateTrees(ctx context.Context, trees []*entities.Tree) error {
+	for _, tree := range trees {
+		_, _, err := r.client.TreeAPI.UpdateTree(ctx, string(tree.TreeID)).Body(client.TreeUpdate{
+			Description:  "Dieser Baum wurde von einem CSV-Import aktualisiert.",
+			Latitude:     float32(tree.Latitude),
+			Longitude:    float32(tree.Longitude),
+			PlantingYear: tree.PlantingYear,
+			Species:      tree.Species,
+			TreeNumber:   tree.Number,
+		}).Execute()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *GreenEcolutionRepo) DeleteTrees(ctx context.Context, treeIDs []entities.TreeID) error {
+	for _, treeID := range treeIDs {
+		_, err := r.client.TreeAPI.DeleteTree(ctx, string(treeID)).Execute()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}

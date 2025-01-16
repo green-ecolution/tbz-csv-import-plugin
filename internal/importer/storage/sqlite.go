@@ -10,9 +10,9 @@ import (
 )
 
 type ImportRepository interface {
-	GetAllTrees(ctx context.Context) ([]entities.TreeImport, error)
+	GetAllTrees(ctx context.Context) ([]entities.Tree, error)
 	DeleteTreesByID(ctx context.Context, treeID []entities.TreeID) error
-	CreateTrees(ctx context.Context, trees []*entities.TreeImport) error
+	CreateTrees(ctx context.Context, trees []*entities.Tree) error
 }
 
 type ImportRepositoryDB struct {
@@ -79,14 +79,14 @@ const (
 	updateQuery = "UPDATE trees SET tree_number = :tree_number, species = :species, area = :area, planting_year = :planting_year, street = :street, latitude = :latitude, longitude = :longitude WHERE tree_id = :tree_id"
 )
 
-func (r *ImportRepositoryDB) GetAllTrees(ctx context.Context) ([]entities.TreeImport, error) {
-	var trees []entities.TreeImport
+func (r *ImportRepositoryDB) GetAllTrees(ctx context.Context) ([]entities.Tree, error) {
+	var trees []entities.Tree
 	err := r.db.SelectContext(ctx, &trees, getAllQuery)
 	return trees, err
 }
 
-func (r *ImportRepositoryTx) GetAllTrees(ctx context.Context) ([]entities.TreeImport, error) {
-	var trees []entities.TreeImport
+func (r *ImportRepositoryTx) GetAllTrees(ctx context.Context) ([]entities.Tree, error) {
+	var trees []entities.Tree
 	err := r.db.SelectContext(ctx, &trees, getAllQuery)
 	if err != nil {
 		return nil, err
@@ -105,22 +105,56 @@ func (r *ImportRepositoryTx) DeleteTreesByID(ctx context.Context, treeID []entit
 	return err
 }
 
-func (r *ImportRepositoryDB) CreateTrees(ctx context.Context, trees []*entities.TreeImport) error {
+func (r *ImportRepositoryDB) CreateTrees(ctx context.Context, trees []*entities.Tree) error {
 	_, err := r.db.NamedExecContext(ctx, createQuery, trees)
 	return err
 }
 
-func (r *ImportRepositoryTx) CreateTrees(ctx context.Context, trees []*entities.TreeImport) error {
+func (r *ImportRepositoryTx) CreateTrees(ctx context.Context, trees []*entities.Tree) error {
 	_, err := r.db.NamedExecContext(ctx, createQuery, trees)
 	return err
 }
 
-func (r *ImportRepositoryDB) UpdateTrees(ctx context.Context, trees []*entities.TreeImport) error {
+func (r *ImportRepositoryDB) UpdateTrees(ctx context.Context, trees []*entities.Tree) error {
 	_, err := r.db.NamedExecContext(ctx, updateQuery, trees)
 	return err
 }
 
-func (r *ImportRepositoryTx) UpdateTrees(ctx context.Context, trees []*entities.TreeImport) error {
+func (r *ImportRepositoryTx) UpdateTrees(ctx context.Context, trees []*entities.Tree) error {
 	_, err := r.db.NamedExecContext(ctx, updateQuery, trees)
+	return err
+}
+
+func (r *ImportRepositoryDB) AddImport(ctx context.Context, i entities.Import, treeIDs []entities.TreeID) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	importRow, err := tx.ExecContext(ctx, "INSERT INTO imports (created_at, user_id, raw_csv) VALUES (datetime('now'), ?, ?)", i.UserID, i.RawCSV)
+	if err != nil {
+		if err := tx.Rollback(); err != nil {
+			return err
+		}
+		return err
+	}
+
+	importID, err := importRow.LastInsertId()
+	if err != nil {
+		if err := tx.Rollback(); err != nil {
+			return err
+		}
+		return err
+	}
+
+	for _, treeID := range treeIDs {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO import_tree (import_id, tree_id) VALUES (?, ?)", importID, treeID); err != nil {
+			if err := tx.Rollback(); err != nil {
+				return err
+			}
+			return err
+		}
+	}
+
 	return err
 }

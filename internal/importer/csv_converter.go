@@ -54,7 +54,7 @@ func NewCSVConverter(file *os.File) *CSVConverter {
 	}
 }
 
-func (c *CSVConverter) Convert(ctx context.Context) ([]*entities.TreeImport, error) {
+func (c *CSVConverter) Convert(ctx context.Context) ([]*entities.Tree, error) {
 	start := time.Now()
 	if err := c.validateCsv(); err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func (c *CSVConverter) isCsvFile() bool {
 	return fileExt == ".csv"
 }
 
-func (c *CSVConverter) mapCSVToTrees(_ context.Context) ([]*entities.TreeImport, error) {
+func (c *CSVConverter) mapCSVToTrees(_ context.Context) ([]*entities.Tree, error) {
 	r := csv.NewReader(c.csvFile)
 	r.LazyQuotes = true
 	header, err := r.Read()
@@ -129,7 +129,7 @@ func (c *CSVConverter) mapCSVToTrees(_ context.Context) ([]*entities.TreeImport,
 		return nil, errors.Wrap(err, "error creating transformer")
 	}
 
-	var trees []*entities.TreeImport
+	var trees []*entities.Tree
 	for i := range utils.NumberSequence(1) {
 		row, err := r.Read()
 		if err != nil {
@@ -145,7 +145,7 @@ func (c *CSVConverter) mapCSVToTrees(_ context.Context) ([]*entities.TreeImport,
 		trees = append(trees, tree)
 	}
 
-	geoPoints := utils.Map(trees, func(tree *entities.TreeImport) GeoPoint {
+	geoPoints := utils.Map(trees, func(tree *entities.Tree) GeoPoint {
 		return GeoPoint{X: tree.Latitude, Y: tree.Longitude}
 	})
 
@@ -170,7 +170,7 @@ func (c *CSVConverter) createHeaderIndexMap(header []string) map[string]int {
 	return headerIndexMap
 }
 
-func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap map[string]int) (*entities.TreeImport, error) {
+func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap map[string]int) (*entities.Tree, error) {
 	// Helper function for validating and retrieving a field from the row
 	getField := func(header string) (string, error) {
 		idx, exists := headerIndexMap[header]
@@ -247,7 +247,7 @@ func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap m
 		return nil, err
 	}
 
-	tree := &entities.TreeImport{
+	tree := &entities.Tree{
 		Area:         area,
 		Street:       street,
 		Number:       treeNumber,

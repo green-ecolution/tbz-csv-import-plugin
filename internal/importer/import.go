@@ -17,10 +17,10 @@ func NewImportService() *ImportService {
 	return &ImportService{}
 }
 
-func (i *ImportService) Import(ctx context.Context, trees []*entities.TreeImport) error {
+func (i *ImportService) Import(ctx context.Context, trees []*entities.Tree) error {
 	deleteQueue := make([]entities.TreeID, len(trees))
-	createQueue := make([]*entities.TreeImport, len(trees))
-	updateQueue := make([]*entities.TreeImport, len(trees))
+	createQueue := make([]*entities.Tree, len(trees))
+	updateQueue := make([]*entities.Tree, len(trees))
 
 	allImportedTrees, err := i.importRepo.GetAllTrees(ctx)
 	if err != nil {
@@ -28,7 +28,7 @@ func (i *ImportService) Import(ctx context.Context, trees []*entities.TreeImport
 	}
 
 	for _, csvTree := range trees {
-		idx := slices.IndexFunc(allImportedTrees, func(tree entities.TreeImport) bool {
+		idx := slices.IndexFunc(allImportedTrees, func(tree entities.Tree) bool {
 			return tree.Latitude == csvTree.Latitude && tree.Longitude == csvTree.Longitude
 		})
 		if idx == -1 {
@@ -62,6 +62,34 @@ func (i *ImportService) Import(ctx context.Context, trees []*entities.TreeImport
 		return nil
 	})
 	if err != nil {
+		return err
+	}
+
+	if err := i.clientRepo.CreateTrees(ctx, createQueue); err != nil {
+		return err
+	}
+
+	if err := i.clientRepo.UpdateTrees(ctx, updateQueue); err != nil {
+		return err
+	}
+
+	if err := i.clientRepo.DeleteTrees(ctx, deleteQueue); err != nil {
+		return err
+	}
+
+	usedTreeIDs := make([]entities.TreeID, len(createQueue)+len(updateQueue))
+	for i, tree := range createQueue {
+		usedTreeIDs[i] = tree.TreeID
+	}
+
+	for i, tree := range updateQueue {
+		usedTreeIDs[i+len(createQueue)] = tree.TreeID
+	}
+
+	if err := i.importRepo.AddImport(ctx, entities.Import{
+		RawCSV: "raw-csv",    // TODO: Insert raw csv
+		UserID: "csv-import", // TODO: Insert user ID
+	}, usedTreeIDs); err != nil {
 		return err
 	}
 
