@@ -1,3 +1,4 @@
 .env
 ui/.__mf__temp/csv_mf_2_import
 import.db
+.pre-commit-config.yaml
