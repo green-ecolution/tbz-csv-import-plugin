@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/green-ecolution/green-ecolution-backend/plugin"
+	"github.com/green-ecolution/green-ecolution-backend/pkg/plugin"
 )
 
 type ServerConfig struct {
@@ -47,8 +47,8 @@ func WithPlugin(plugin plugin.Plugin) ServerOption {
 }
 
 var defaultServerConfig = &ServerConfig{
-	port: 8080,
-  version: "develop",
+	port:    8080,
+	version: "develop",
 }
 
 func NewServer(opts ...ServerOption) *Server {
@@ -63,8 +63,8 @@ func NewServer(opts ...ServerOption) *Server {
 
 func (s *Server) Run(ctx context.Context) error {
 	app := fiber.New(fiber.Config{
-    AppName: fmt.Sprintf("%s (%s)", s.cfg.plugin.Name, s.cfg.version),
-  })
+		AppName: fmt.Sprintf("%s (%s)", s.cfg.plugin.Name, s.cfg.version),
+	})
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Hello, World! This is the plugin server for " + s.cfg.plugin.Name)
 	})

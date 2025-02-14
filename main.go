@@ -6,23 +6,22 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"net/url"
-	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 
-	"github.com/green-ecolution/green-ecolution-backend/client"
-	"github.com/green-ecolution/green-ecolution-backend/plugin"
-	"github.com/green-ecolution/tbz-csv-import-plugin/internal/importer/storage"
+	"github.com/caarlos0/env/v11"
+	"github.com/green-ecolution/green-ecolution-backend/pkg/client"
+	"github.com/green-ecolution/green-ecolution-backend/pkg/plugin"
 	"github.com/green-ecolution/tbz-csv-import-plugin/internal/server"
-	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
-	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/oauth2"
 )
 
-var version = "develop"
+var (
+	version = "develop"
+	cfg     Config
+)
 
 //go:embed all:ui/dist
 var f embed.FS
@@ -33,12 +32,7 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	clientID := os.Getenv("CLIENT_ID")
-	clientSecret := os.Getenv("CLIENT_SECRET")
-	hostPathEnv := os.Getenv("HOST_PATH")
-
-	pluginPath, err := url.Parse("http://localhost:8123/")
-	if err != nil {
+	if err := env.Parse(&cfg); err != nil {
 		panic(err)
 	}
 
@@ -47,7 +41,7 @@ func main() {
 		Name:           "CSV Import",
 		Version:        version,
 		Description:    "A plugin to import CSV files of trees from the TBZ Flensburg into the Green Ecolution system.",
-		PluginHostPath: pluginPath,
+		PluginHostPath: cfg.PluginPath,
 	}
 
 	http := server.NewServer(
@@ -71,21 +65,8 @@ func main() {
 		}
 	}()
 
-	db := sqlx.MustConnect("sqlite3", "file:import.db?cache=shared")
-	importRepo := storage.NewImportRepositoryDB(db)
-
-	if err = importRepo.Setup(); err != nil {
-		slog.Error("Failed to migrate database", "error", err)
-		panic(err)
-	}
-
-	hostPath, err := url.Parse(hostPathEnv)
-	if err != nil {
-		panic(err)
-	}
-
 	worker, err := plugin.NewPluginWorker(
-		plugin.WithHost(hostPath),
+		plugin.WithHost(cfg.HostPath),
 		plugin.WithPlugin(p),
 		plugin.WithHostAPIVersion("v1"),
 	)
@@ -93,7 +74,7 @@ func main() {
 		panic(err)
 	}
 
-	token, err := worker.Register(ctx, clientID, clientSecret)
+	token, err := worker.Register(ctx, cfg.ClientID, cfg.ClientSecret)
 	if err != nil {
 		panic(err)
 	}
@@ -109,21 +90,12 @@ func main() {
 	clientCfg := client.NewConfiguration()
 	clientCfg.Servers = client.ServerConfigurations{
 		{
-			URL:         fmt.Sprintf("%s/api", hostPathEnv),
+			URL:         fmt.Sprintf("%s/api", cfg.HostPath),
 			Description: "Green Ecolution API",
 		},
 	}
 	clientCfg.Debug = true
 	clientCfg.HTTPClient = oauthClient
-
-	repo := storage.NewGreenEcolutionRepo(clientCfg)
-
-	auth := context.WithValue(ctx, client.ContextOAuth2, oauthToken)
-	info, err := repo.GetInfo(auth)
-	if err != nil {
-		slog.Error("Error while getting app info", "error", err)
-	}
-	slog.Info("App info", "info", info)
 
 	go func() {
 		defer wg.Done()

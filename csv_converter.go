@@ -1,8 +1,9 @@
-package importer
+package main
 
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,9 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/green-ecolution/tbz-csv-import-plugin/internal/entities"
 	"github.com/green-ecolution/tbz-csv-import-plugin/internal/utils"
-	"github.com/pkg/errors"
 )
 
 type CSVConverter struct {
@@ -54,7 +53,7 @@ func NewCSVConverter(file *os.File) *CSVConverter {
 	}
 }
 
-func (c *CSVConverter) Convert(ctx context.Context) ([]*entities.Tree, error) {
+func (c *CSVConverter) Convert(ctx context.Context) ([]*CsvTree, error) {
 	start := time.Now()
 	if err := c.validateCsv(); err != nil {
 		return nil, err
@@ -114,22 +113,21 @@ func (c *CSVConverter) isCsvFile() bool {
 	return fileExt == ".csv"
 }
 
-func (c *CSVConverter) mapCSVToTrees(_ context.Context) ([]*entities.Tree, error) {
+func (c *CSVConverter) mapCSVToTrees(_ context.Context) ([]*CsvTree, error) {
 	r := csv.NewReader(c.csvFile)
 	r.LazyQuotes = true
 	header, err := r.Read()
 	if err != nil {
 		slog.Error("Failed to read CSV", "error", err)
-		return nil, errors.Wrap(err, "failed to read CSV")
+		return nil, errors.Join(err, errors.New("failed to read CSV"))
 	}
 
 	headerIndexMap := c.createHeaderIndexMap(header)
-	transformer, err := NewGeoTransformer(c.fromEPSG, c.toEPSG)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating transformer")
+		return nil, errors.Join(err, errors.New("error creating transformer"))
 	}
 
-	var trees []*entities.Tree
+	var trees []*CsvTree
 	for i := range utils.NumberSequence(1) {
 		row, err := r.Read()
 		if err != nil {
@@ -145,20 +143,6 @@ func (c *CSVConverter) mapCSVToTrees(_ context.Context) ([]*entities.Tree, error
 		trees = append(trees, tree)
 	}
 
-	geoPoints := utils.Map(trees, func(tree *entities.Tree) GeoPoint {
-		return GeoPoint{X: tree.Latitude, Y: tree.Longitude}
-	})
-
-	transformedPoints, err := transformer.TransformBatch(geoPoints)
-	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to transform batch of points from EPSG %d to EPSG %d. err: %s", c.fromEPSG, c.toEPSG, err))
-	}
-
-	for i, tree := range trees {
-		tree.Latitude = transformedPoints[i].X
-		tree.Longitude = transformedPoints[i].Y
-	}
-
 	return trees, nil
 }
 
@@ -170,7 +154,7 @@ func (c *CSVConverter) createHeaderIndexMap(header []string) map[string]int {
 	return headerIndexMap
 }
 
-func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap map[string]int) (*entities.Tree, error) {
+func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap map[string]int) (*CsvTree, error) {
 	// Helper function for validating and retrieving a field from the row
 	getField := func(header string) (string, error) {
 		idx, exists := headerIndexMap[header]
@@ -187,7 +171,7 @@ func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap m
 	parseFloat := func(value string, fieldName string) (float64, error) {
 		parsedValue, err := strconv.ParseFloat(strings.ReplaceAll(value, ",", "."), 64)
 		if err != nil {
-			return 0, errors.Wrap(err, fmt.Sprintf("invalid '%s' value at row: %d", fieldName, rowIdx))
+			return 0, errors.Join(err, fmt.Errorf("invalid '%s' value at row: %d", fieldName, rowIdx))
 		}
 		return parsedValue, nil
 	}
@@ -195,7 +179,7 @@ func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap m
 	parseInt := func(value string, fieldName string) (int, error) {
 		parsedValue, err := strconv.Atoi(value)
 		if err != nil {
-			return 0, errors.Wrap(err, fmt.Sprintf("invalid '%s' value at row: %d", fieldName, rowIdx))
+			return 0, errors.Join(err, fmt.Errorf("invalid '%s' value at row: %d", fieldName, rowIdx))
 		}
 		return parsedValue, nil
 	}
@@ -247,14 +231,14 @@ func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap m
 		return nil, err
 	}
 
-	tree := &entities.Tree{
+	tree := &CsvTree{
 		Area:         area,
 		Street:       street,
-		Number:       treeNumber,
+		TreeNumber:   treeNumber,
 		Species:      species,
-		Latitude:     latitude,
-		Longitude:    longitude,
-		PlantingYear: int32(plantingYear),
+		Hochwert:     latitude,
+		Rechtswert:   longitude,
+		PlantingYear: plantingYear,
 	}
 
 	return tree, nil
