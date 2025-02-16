@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"slices"
 
 	"github.com/green-ecolution/green-ecolution-backend/pkg/client"
@@ -35,49 +34,10 @@ func (r *GreenEcolutionClient) GetAll(ctx context.Context) ([]Tree, error) {
 		return nil, err
 	}
 
-	toReset := FilterIter(slices.Values(trees.Data), func(t client.Tree) bool {
-		v, ok := t.AdditionalInformation["object_id"]
-		if !ok {
-			return true
-		}
-
-		v, ok = v.(float64)
-		if !ok {
-			return true
-		}
-
-		if v == 0 {
-			return true
-		}
-
-		return false
-	})
-
-	// Delete/Reset Trees if there has no object id in additional info field
-	for t := range toReset {
-		if err := r.Delete(ctx, t.Id); err != nil {
-			slog.Warn("failed to delete tree in green ecolution backend", "error", err, "tree_id", t.Id)
-		}
-	}
-
-	filteredClientTrees := FilterIter(slices.Values(trees.Data), func(t client.Tree) bool {
-		v, ok := t.AdditionalInformation["object_id"]
-		if !ok {
-			return false
-		}
-
-		v, ok = v.(float64)
-		if !ok || v == 0 {
-			return false
-		}
-
-		return true
-	})
-
-	mapSeq := MapIter(filteredClientTrees, func(t client.Tree) Tree {
+	mapSeq := MapIter(slices.Values(trees.Data), func(t client.Tree) Tree {
 		return Tree{
 			Tree:     t,
-			ObjectID: int(t.AdditionalInformation["object_id"].(float64)),
+			ObjectID: CombineToID(t.Latitude, t.Longitude),
 		}
 	})
 
@@ -87,16 +47,13 @@ func (r *GreenEcolutionClient) GetAll(ctx context.Context) ([]Tree, error) {
 func (r *GreenEcolutionClient) Create(ctx context.Context, tree Tree) error {
 	body := client.TreeCreate{
 		Description:  fmt.Sprintf("%s - Dieser Baum wurde importiert", tree.Description),
-		Latitude:     float32(tree.Latitude),
-		Longitude:    float32(tree.Longitude),
+		Latitude:     tree.Latitude,
+		Longitude:    tree.Longitude,
 		Number:       tree.Number,
 		PlantingYear: tree.PlantingYear,
 		Readonly:     true,
 		Species:      tree.Species,
 		Provider:     &r.provider,
-		AdditionalInformation: map[string]interface{}{
-			"object_id": (int(tree.Latitude) << 8) + int(tree.Longitude),
-		},
 	}
 
 	_, _, err := r.client.TreeAPI.CreateTree(ctx).Body(body).Execute()
@@ -106,16 +63,13 @@ func (r *GreenEcolutionClient) Create(ctx context.Context, tree Tree) error {
 func (r *GreenEcolutionClient) Update(ctx context.Context, id int32, tree Tree) error {
 	body := client.TreeUpdate{
 		Description:  tree.Description,
-		Latitude:     float32(tree.Latitude),
-		Longitude:    float32(tree.Longitude),
+		Latitude:     tree.Latitude,
+		Longitude:    tree.Longitude,
 		Number:       tree.Number,
 		PlantingYear: tree.PlantingYear,
 		Readonly:     true,
 		Species:      tree.Species,
 		Provider:     &r.provider,
-		AdditionalInformation: map[string]interface{}{
-			"object_id": (int(tree.Latitude) << 8) + int(tree.Longitude),
-		},
 	}
 
 	_, _, err := r.client.TreeAPI.UpdateTree(ctx, id).Body(body).Execute()

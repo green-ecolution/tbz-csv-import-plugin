@@ -4,16 +4,19 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"log/slog"
+	"net/http"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/green-ecolution/green-ecolution-backend/pkg/client"
 	"github.com/green-ecolution/green-ecolution-backend/pkg/plugin"
-	"github.com/green-ecolution/tbz-csv-import-plugin/internal/server"
 	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
 )
@@ -36,6 +39,9 @@ func main() {
 		panic(err)
 	}
 
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	p := plugin.Plugin{
 		Slug:           "csv-import",
 		Name:           "CSV Import",
@@ -43,27 +49,6 @@ func main() {
 		Description:    "A plugin to import CSV files of trees from the TBZ Flensburg into the Green Ecolution system.",
 		PluginHostPath: cfg.PluginPath,
 	}
-
-	http := server.NewServer(
-		server.WithPort(8123),
-		server.WithPluginFS(f),
-		server.WithPlugin(p),
-		server.WithVersion(version),
-	)
-
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	var wg sync.WaitGroup
-	//wg.Add(2)
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		if err = http.Run(ctx); err != nil {
-			slog.Error("Error while running http server", "error", err)
-		}
-	}()
 
 	worker, err := plugin.NewPluginWorker(
 		plugin.WithHost(cfg.HostPath),
@@ -74,19 +59,7 @@ func main() {
 		panic(err)
 	}
 
-	token, err := worker.Register(ctx, cfg.ClientID, cfg.ClientSecret)
-	if err != nil {
-		panic(err)
-	}
-
-	oauthToken := &oauth2.Token{
-		AccessToken:  token.AccessToken,
-		RefreshToken: token.RefreshToken,
-		Expiry:       token.Expiry,
-		ExpiresIn:    token.ExpiresIn,
-		TokenType:    "Bearer",
-	}
-	oauthClient := oauth2.NewClient(ctx, oauth2.StaticTokenSource(oauthToken))
+	oauthClient := authClient(ctx, worker)
 	clientCfg := client.NewConfiguration()
 	clientCfg.Servers = client.ServerConfigurations{
 		{
@@ -97,12 +70,71 @@ func main() {
 	clientCfg.Debug = true
 	clientCfg.HTTPClient = oauthClient
 
+	geClient := NewGreenEcolutionRepo(clientCfg, p.Slug)
+
+	fSub, err := fs.Sub(f, "ui/dist")
+	if err != nil {
+		panic(err)
+	}
+
+	var serverPort int
+	if cfg.PluginPath.Port() != "" {
+		serverPort, err = strconv.Atoi(cfg.PluginPath.Port())
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	server := NewServer(
+		WithPort(serverPort),
+		WithPluginFS(fSub),
+		WithPlugin(p),
+		WithVersion(version),
+		WithClient(geClient),
+	)
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		if err = server.Run(ctx); err != nil {
+			slog.Error("error while running http server", "error", err)
+		}
+	}()
+
 	go func() {
 		defer wg.Done()
 		if err := worker.RunHeartbeat(ctx); err != nil {
-			slog.Error("Failed to send heartbeat", "error", err)
+			slog.Error("failed to send heartbeat", "error", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-ctx.Done()
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		if err := worker.Unregister(timeoutCtx); err != nil {
+			slog.Error("failed to unregister plugin", "error", err)
 		}
 	}()
 
 	wg.Wait()
+}
+
+func authClient(ctx context.Context, worker *plugin.PluginWorker) *http.Client {
+	token, err := worker.Register(ctx, cfg.ClientID, cfg.ClientSecret)
+	if err != nil {
+		panic(err)
+	}
+
+	oauthToken := &oauth2.Token{
+		AccessToken:  token.AccessToken,
+		RefreshToken: token.RefreshToken,
+		Expiry:       token.Expiry,
+		TokenType:    token.TokenType,
+	}
+
+	return oauth2.NewClient(ctx, NewTokenSource(worker.RefreshToken, oauthToken))
 }

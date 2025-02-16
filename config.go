@@ -12,5 +12,5 @@ type Config struct {
 	ClientSecret string   `env:"GE_CLIENT_SECRET"`
 	CsvHeaders   []string `env:"GE_CSV_HEADERS" envSeparator:","`
 	CsvUsedEpsg  string   `env:"GE_CSV_USED_EPSG"`
-	CsvToEpsg    string   `env:"GE_CSV_To_EPSG"`
+	CsvToEpsg    string   `env:"GE_CSV_TO_EPSG"`
 }

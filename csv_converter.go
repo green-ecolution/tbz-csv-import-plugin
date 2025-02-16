@@ -6,59 +6,26 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
-	"os"
+	"mime/multipart"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/green-ecolution/tbz-csv-import-plugin/internal/utils"
 )
 
 type CSVConverter struct {
-	expectedHeaders []string
-	fromEPSG        int
-	toEPSG          int
-	csvFile         *os.File
+	csvFile       multipart.File
+	csvFileHeader *multipart.FileHeader
 }
 
-func NewCSVConverter(file *os.File) *CSVConverter {
-	expectedCSVHeaders := strings.Split(strings.Trim(os.Getenv("CSV_HEADERS"), " "), ",")
-	if len(expectedCSVHeaders) == 0 {
-		log.Fatalf("Error getting CSV headers from environment variable. Please check the CSV_HEADERS variable.\n")
-	}
-
-	fromEPSGStr := os.Getenv("CSV_USED_EPSG")
-	fromEPSG, err := strconv.Atoi(fromEPSGStr)
-	if err != nil {
-		log.Fatalf("Error converting EPSG from string to int: %v\n", err)
-	}
-
-	toEPSGStr := os.Getenv("CSV_TO_EPSG")
-	toEPSG := 4326 // default to WGS84
-	if toEPSGStr != "" {
-		toEPSG, err = strconv.Atoi(toEPSGStr)
-		if err != nil {
-			log.Fatalf("Error converting EPSG from string to int: %v\n", err)
-		}
-	}
-
+func NewCSVConverter(fileHeader *multipart.FileHeader, file multipart.File) *CSVConverter {
 	return &CSVConverter{
-		expectedHeaders: expectedCSVHeaders,
-		fromEPSG:        fromEPSG,
-		toEPSG:          toEPSG,
-		csvFile:         file,
+		csvFile:       file,
+		csvFileHeader: fileHeader,
 	}
 }
 
-func (c *CSVConverter) Convert(ctx context.Context) ([]*CsvTree, error) {
-	start := time.Now()
-	if err := c.validateCsv(); err != nil {
-		return nil, err
-	}
-
+func (c *CSVConverter) Convert(ctx context.Context) ([]CsvTree, error) {
 	if _, err := c.csvFile.Seek(0, 0); err != nil {
 		return nil, err
 	}
@@ -68,38 +35,39 @@ func (c *CSVConverter) Convert(ctx context.Context) ([]*CsvTree, error) {
 		return nil, err
 	}
 
-	elapsed := time.Since(start)
-	slog.Info("Imported trees from CSV", "elapsed", elapsed)
-
 	return trees, nil
 }
 
-func (c *CSVConverter) validateCsv() error {
-	if !c.isCsvFile() {
-		return errors.New("file is not a CSV file")
+func (c *CSVConverter) IsValid() bool {
+	if strings.ToLower(filepath.Ext(c.csvFileHeader.Filename)) != ".csv" || c.csvFileHeader.Header.Get("Content-Type") != "text/csv" {
+		return false
 	}
 
 	csvReader := csv.NewReader(c.csvFile)
 	headers, err := csvReader.Read()
 	if err != nil {
-		return err
+		return false
 	}
 
-	if !c.hasExpectedHeaders(headers) {
-		return errors.New("csv file does not contain the expected headers")
+	if !hasExpectedHeaders(headers) {
+		return false
 	}
 
-	_, err = csvReader.ReadAll()
-	return err
+	if _, err := csvReader.ReadAll(); err != nil {
+		return false
+	}
+
+	return true
 }
 
-func (c *CSVConverter) hasExpectedHeaders(headers []string) bool {
-	if len(headers) != len(c.expectedHeaders) {
+func hasExpectedHeaders(headers []string) bool {
+	expectedHeaders := cfg.CsvHeaders
+	if len(headers) != len(expectedHeaders) {
 		return false
 	}
 
 	for i, header := range headers {
-		if header != c.expectedHeaders[i] {
+		if header != expectedHeaders[i] {
 			return false
 		}
 	}
@@ -107,28 +75,18 @@ func (c *CSVConverter) hasExpectedHeaders(headers []string) bool {
 	return true
 }
 
-func (c *CSVConverter) isCsvFile() bool {
-	fileExt := strings.ToLower(filepath.Ext(c.csvFile.Name()))
-	slog.Debug("File extension", "ext", fileExt)
-	return fileExt == ".csv"
-}
-
-func (c *CSVConverter) mapCSVToTrees(_ context.Context) ([]*CsvTree, error) {
+func (c *CSVConverter) mapCSVToTrees(_ context.Context) ([]CsvTree, error) {
 	r := csv.NewReader(c.csvFile)
 	r.LazyQuotes = true
 	header, err := r.Read()
 	if err != nil {
-		slog.Error("Failed to read CSV", "error", err)
+		slog.Error("failed to read csv", "error", err)
 		return nil, errors.Join(err, errors.New("failed to read CSV"))
 	}
 
 	headerIndexMap := c.createHeaderIndexMap(header)
-	if err != nil {
-		return nil, errors.Join(err, errors.New("error creating transformer"))
-	}
-
-	var trees []*CsvTree
-	for i := range utils.NumberSequence(1) {
+	var trees []CsvTree
+	for i := range NumberSequence(1) {
 		row, err := r.Read()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -154,7 +112,7 @@ func (c *CSVConverter) createHeaderIndexMap(header []string) map[string]int {
 	return headerIndexMap
 }
 
-func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap map[string]int) (*CsvTree, error) {
+func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap map[string]int) (CsvTree, error) {
 	// Helper function for validating and retrieving a field from the row
 	getField := func(header string) (string, error) {
 		idx, exists := headerIndexMap[header]
@@ -184,54 +142,55 @@ func (c *CSVConverter) parseRowToTree(rowIdx int, row []string, headerIndexMap m
 		return parsedValue, nil
 	}
 
-	area, err := getField(c.expectedHeaders[0])
+	expectedHeaders := cfg.CsvHeaders
+	area, err := getField(expectedHeaders[0])
 	if err != nil {
-		return nil, err
+		return CsvTree{}, err
 	}
 
-	street, err := getField(c.expectedHeaders[1])
+	street, err := getField(expectedHeaders[1])
 	if err != nil {
-		return nil, err
+		return CsvTree{}, err
 	}
 
-	treeNumber, err := getField(c.expectedHeaders[2])
+	treeNumber, err := getField(expectedHeaders[2])
 	if err != nil {
-		return nil, err
+		return CsvTree{}, err
 	}
 
-	species, err := getField(c.expectedHeaders[3])
+	species, err := getField(expectedHeaders[3])
 	if err != nil {
 		species = "" // Default to empty string
 	}
 
-	latitudeStr, err := getField(c.expectedHeaders[4])
+	latitudeStr, err := getField(expectedHeaders[4])
 	if err != nil {
-		return nil, err
+		return CsvTree{}, err
 	}
 	latitude, err := parseFloat(latitudeStr, "Hochwert")
 	if err != nil {
-		return nil, err
+		return CsvTree{}, err
 	}
 
-	longitudeStr, err := getField(c.expectedHeaders[5])
+	longitudeStr, err := getField(expectedHeaders[5])
 	if err != nil {
-		return nil, err
+		return CsvTree{}, err
 	}
 	longitude, err := parseFloat(longitudeStr, "Rechtswert")
 	if err != nil {
-		return nil, err
+		return CsvTree{}, err
 	}
 
-	plantingYearStr, err := getField(c.expectedHeaders[6])
+	plantingYearStr, err := getField(expectedHeaders[6])
 	if err != nil {
-		return nil, err
+		return CsvTree{}, err
 	}
 	plantingYear, err := parseInt(plantingYearStr, "Pflanzjahr")
 	if err != nil {
-		return nil, err
+		return CsvTree{}, err
 	}
 
-	tree := &CsvTree{
+	tree := CsvTree{
 		Area:         area,
 		Street:       street,
 		TreeNumber:   treeNumber,

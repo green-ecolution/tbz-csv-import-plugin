@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 	"time"
@@ -40,19 +41,19 @@ func (s *SyncTrees) Sync(ctx context.Context) error {
 	})
 
 	slices.SortFunc(geTrees, func(a Tree, b Tree) int {
-		return (int(a.Latitude) << 8) + int(a.Longitude) - (int(b.Latitude) << 8) + int(b.Longitude)
+		return a.ObjectID - b.ObjectID
 	})
 
 	createdQueue := make([]Tree, 0)
 	updateQueue := make([]Tree, 0)
 	archiveQueue := make([]Tree, 0)
 
-	idxRegTrees := 0
+	idxCsvTrees := 0
 	idxGeTrees := 0
 
-	for idxRegTrees < len(mapCsvTrees) || idxGeTrees < len(geTrees) {
-		if idxRegTrees == len(mapCsvTrees) {
-			archiveQueue = append(archiveQueue, geTrees[idxRegTrees:]...)
+	for idxCsvTrees < len(mapCsvTrees) || idxGeTrees < len(geTrees) {
+		if idxCsvTrees == len(mapCsvTrees) {
+			archiveQueue = append(archiveQueue, geTrees[idxCsvTrees:]...)
 			break
 		}
 
@@ -61,30 +62,41 @@ func (s *SyncTrees) Sync(ctx context.Context) error {
 			break
 		}
 
-		regTree := mapCsvTrees[idxRegTrees]
+		csvTree := mapCsvTrees[idxCsvTrees]
 		geTree := geTrees[idxGeTrees]
 
-		if regTree.ObjectID == geTree.ObjectID {
-			if updatedTree, ok := s.checkDiff(regTree, geTree); !ok {
+		fmt.Println(csvTree.ObjectID, geTree.ObjectID)
+
+		if csvTree.ObjectID == geTree.ObjectID {
+			if updatedTree, ok := s.checkDiff(csvTree, geTree); !ok {
 				updateQueue = append(updateQueue, updatedTree)
 			}
 			idxGeTrees++
-			idxRegTrees++
+			idxCsvTrees++
 			continue
 		}
 
-		if regTree.ObjectID < geTree.ObjectID {
-			createdQueue = append(createdQueue, regTree)
-			idxRegTrees++
+		if csvTree.ObjectID < geTree.ObjectID {
+			createdQueue = append(createdQueue, csvTree)
+			idxCsvTrees++
 			continue
 		}
 
-		if regTree.ObjectID > geTree.ObjectID {
+		if csvTree.ObjectID > geTree.ObjectID {
 			archiveQueue = append(archiveQueue, geTree)
 			idxGeTrees++
 			continue
 		}
 	}
+
+	fmt.Println("create queue")
+	fmt.Printf("%+v\n", createdQueue)
+
+	fmt.Println("update queue")
+	fmt.Printf("%+v\n", updateQueue)
+
+	fmt.Println("archive queue")
+	fmt.Printf("%+v\n", archiveQueue)
 
 	for _, e := range createdQueue {
 		if err := s.client.Create(ctx, e); err != nil {

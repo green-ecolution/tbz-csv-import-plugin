@@ -43,15 +43,16 @@ func TreesFromBatch(csvTrees []CsvTree) ([]Tree, error) {
 	}
 
 	treeSeq := MapIter21(Zip(slices.Values(csvTrees), slices.Values(geoPoints)), func(t CsvTree, g GeoPoint) Tree {
+		lat, long := float32(g.X), float32(g.Y)
 		return Tree{
-			ObjectID: (int(g.X) << 8) + int(g.Y),
+			ObjectID: CombineToID(lat, long),
 			Tree: client.Tree{
 				PlantingYear: int32(t.PlantingYear),
 				Species:      t.Species,
 				Number:       t.TreeNumber,
-				Description:  fmt.Sprint("%s %s", t.Area, t.Street),
-				Latitude:     float32(g.X),
-				Longitude:    float32(g.Y),
+				Description:  fmt.Sprintf("%s %s", t.Area, t.Street),
+				Latitude:     lat,
+				Longitude:    long,
 			},
 		}
 	})
