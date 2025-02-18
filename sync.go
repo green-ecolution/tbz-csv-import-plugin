@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"time"
 )
 
 type SyncTrees struct {
 	csvTrees []CsvTree
 	client   *GreenEcolutionClient
-	lastSync time.Time
 }
 
 func NewSyncTrees(csvTrees []CsvTree, client *GreenEcolutionClient) *SyncTrees {
@@ -21,26 +19,26 @@ func NewSyncTrees(csvTrees []CsvTree, client *GreenEcolutionClient) *SyncTrees {
 	}
 }
 
-func (s *SyncTrees) Sync(ctx context.Context) error {
+func (s *SyncTrees) Sync(ctx context.Context) (TreeImportResponse, error) {
 	slog.Info("sync tbz register trees to green ecolution backend")
 
 	mapCsvTrees, err := TreesFromBatch(s.csvTrees)
 	if err != nil {
 		slog.Error("failed to map csv trees to internal trees", "error", err)
-		return err
+		return TreeImportResponse{}, err
 	}
 
 	geTrees, err := s.client.GetAll(ctx)
 	if err != nil {
 		slog.Error("failed to get trees from green ecolution backend", "error", err)
-		return nil
+		return TreeImportResponse{}, err
 	}
 
-	slices.SortFunc(mapCsvTrees, func(a Tree, b Tree) int {
+	slices.SortFunc(mapCsvTrees, func(a, b Tree) int {
 		return a.ObjectID - b.ObjectID
 	})
 
-	slices.SortFunc(geTrees, func(a Tree, b Tree) int {
+	slices.SortFunc(geTrees, func(a, b Tree) int {
 		return a.ObjectID - b.ObjectID
 	})
 
@@ -116,8 +114,36 @@ func (s *SyncTrees) Sync(ctx context.Context) error {
 		}
 	}
 
-	s.lastSync = time.Now()
-	return nil
+	importedTrees := make([]TreeImport, len(archiveQueue)+len(updateQueue)+len(createdQueue))
+	importedTrees = append(importedTrees, Map(createdQueue, func(t Tree) TreeImport {
+		return TreeImport{
+			Tree:       t,
+			ImportType: ImportTypeCreate,
+		}
+	})...)
+
+	importedTrees = append(importedTrees, Map(updateQueue, func(t Tree) TreeImport {
+		return TreeImport{
+			Tree:       t,
+			ImportType: ImportTypeUpdate,
+		}
+	})...)
+
+	importedTrees = append(importedTrees, Map(archiveQueue, func(t Tree) TreeImport {
+		return TreeImport{
+			Tree:       t,
+			ImportType: ImportTypeArchive,
+		}
+	})...)
+
+	slices.SortFunc(importedTrees, func(a, b TreeImport) int {
+		return a.Tree.ObjectID - b.Tree.ObjectID
+	})
+
+	return TreeImportResponse{
+		ImportedTrees: importedTrees,
+		Raw:           s.csvTrees,
+	}, nil
 }
 
 func (s *SyncTrees) checkDiff(new, old Tree) (Tree, bool) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -127,11 +128,13 @@ func (s *Server) handleCsvUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	syncTrees := NewSyncTrees(convertedTrees, s.cfg.client)
-	if err := syncTrees.Sync(ctx); err != nil {
+	importedTrees, err := syncTrees.Sync(ctx)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("failed to sync trees to green ecolution backend: error: %s", err)))
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	encode := json.NewEncoder(w)
+	encode.Encode(importedTrees)
 }

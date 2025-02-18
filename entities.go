@@ -9,17 +9,35 @@ import (
 
 type Tree struct {
 	client.Tree
-	ObjectID int
+	ObjectID int `json:"objectId"`
 }
 
 type CsvTree struct {
-	Area         string
-	Street       string
-	TreeNumber   string
-	Species      string
-	Hochwert     float64
-	Rechtswert   float64
-	PlantingYear int
+	Area         string  `json:"area"`
+	Street       string  `json:"street"`
+	TreeNumber   string  `json:"treeNumber"`
+	Species      string  `json:"species"`
+	Hochwert     float64 `json:"hochwert"`
+	Rechtswert   float64 `json:"rechtswert"`
+	PlantingYear int     `json:"plantingYear"`
+}
+
+type ImportType string
+
+const (
+	ImportTypeCreate  ImportType = "create"
+	ImportTypeUpdate             = "update"
+	ImportTypeArchive            = "archive"
+)
+
+type TreeImport struct {
+	Tree       Tree       `json:"tree"`
+	ImportType ImportType `json:"importType"`
+}
+
+type TreeImportResponse struct {
+	ImportedTrees []TreeImport `json:"importedTrees"`
+	Raw           []CsvTree    `json:"rawTrees"`
 }
 
 func TreesFromBatch(csvTrees []CsvTree) ([]Tree, error) {
