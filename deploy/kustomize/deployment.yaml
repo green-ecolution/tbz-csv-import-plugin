@@ -1,0 +1,62 @@
+# https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: csv-import-plugin
+  labels:
+    app: csv-import-plugin
+spec:
+  selector:
+    matchLabels:
+      app: csv-import-plugin
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container:  csv-import-plugin
+      labels:
+        app: csv-import-plugin
+    spec:
+      # initContainers:
+        # Init containers are exactly like regular containers, except:
+          # - Init containers always run to completion.
+          # - Each init container must complete successfully before the next one starts.
+      containers:
+      - name: csv-import-plugin
+        image: plugin-image
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+        livenessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 5
+          timeoutSeconds: 2
+          successThreshold: 1
+          failureThreshold: 3
+          periodSeconds: 10
+        envFrom:
+          - configMapRef:
+              name: csv-import-config
+          - secretRef:
+              name: csv-import-secret
+        ports:
+        - containerPort: 3000
+          name: http
+      restartPolicy: Always
+
