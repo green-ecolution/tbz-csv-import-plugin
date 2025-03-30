@@ -53,7 +53,7 @@ function App() {
       formData.append('file', file)
 
       try {
-        return await fetch(`/${baseUrl}/v1/plugin/csv-import/upload`, {
+        return await fetch(`/${baseUrl}/plugin/csv-import/upload`, {
           method: 'POST',
           body: formData
         }).then(res => {
