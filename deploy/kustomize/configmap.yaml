@@ -9,6 +9,7 @@ data:
   GE_CSV_USED_EPSG: "EPSG:31467"
   GE_CSV_TO_EPSG: "EPSG:4236"
 
+  GE_PLUGIN_PORT: "3000"
   GE_HOST_PATH: http://backend
   GE_PLUGIN_PATH: http://csv-import
   GE_CLIENT_ID: tbz-csv-import-plugin
