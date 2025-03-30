@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"strconv"
 	"sync"
@@ -54,6 +55,8 @@ func main() {
 		plugin.WithHost(cfg.HostPath),
 		plugin.WithPlugin(p),
 		plugin.WithHostAPIVersion("v1"),
+		plugin.WithClientID(cfg.ClientID),
+		plugin.WithClientSecret(cfg.ClientSecret),
 	)
 	if err != nil {
 		panic(err)
@@ -106,25 +109,21 @@ func main() {
 		defer wg.Done()
 		if err := worker.RunHeartbeat(ctx); err != nil {
 			slog.Error("failed to send heartbeat", "error", err)
+			cleanup(worker)
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
 		<-ctx.Done()
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-
-		if err := worker.Unregister(timeoutCtx); err != nil {
-			slog.Error("failed to unregister plugin", "error", err)
-		}
+		cleanup(worker)
 	}()
 
 	wg.Wait()
 }
 
 func authClient(ctx context.Context, worker *plugin.PluginWorker) *http.Client {
-	token, err := worker.Register(ctx, cfg.ClientID, cfg.ClientSecret)
+	token, err := worker.Register(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -137,4 +136,15 @@ func authClient(ctx context.Context, worker *plugin.PluginWorker) *http.Client {
 	}
 
 	return oauth2.NewClient(ctx, NewTokenSource(worker.RefreshToken, oauthToken))
+}
+
+func cleanup(worker *plugin.PluginWorker) {
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := worker.Unregister(timeoutCtx); err != nil {
+		slog.Error("failed to unregister plugin", "error", err)
+	}
+
+	os.Exit(1)
 }
