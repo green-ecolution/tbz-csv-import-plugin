@@ -1,6 +1,7 @@
 import React, { useState } from "react"
 
 type ImportType = "create" | "update" | "archive"
+const baseUrl = import.meta.env.VITE_BASE_URL ?? "api-local/v1";
 
 export interface Tree {
   id: number
@@ -52,7 +53,7 @@ function App() {
       formData.append('file', file)
 
       try {
-        return await fetch('/api-local/v1/plugin/csv-import/upload', {
+        return await fetch(`/${baseUrl}/v1/plugin/csv-import/upload`, {
           method: 'POST',
           body: formData
         }).then(res => {
