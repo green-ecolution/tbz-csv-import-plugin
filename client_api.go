@@ -51,7 +51,6 @@ func (r *GreenEcolutionClient) Create(ctx context.Context, tree Tree) error {
 		Longitude:    tree.Longitude,
 		Number:       tree.Number,
 		PlantingYear: tree.PlantingYear,
-		Readonly:     true,
 		Species:      tree.Species,
 		Provider:     &r.provider,
 	}
@@ -67,7 +66,6 @@ func (r *GreenEcolutionClient) Update(ctx context.Context, id int32, tree Tree) 
 		Longitude:    tree.Longitude,
 		Number:       tree.Number,
 		PlantingYear: tree.PlantingYear,
-		Readonly:     true,
 		Species:      tree.Species,
 		Provider:     &r.provider,
 	}
