@@ -7,6 +7,6 @@ resources:
 images:
 - name: plugin-image
   newName: ghcr.io/green-ecolution/tbz-csv-import-plugin
-  newTag: d3ebf53
+  newTag: 5864bb3
 generators:
 - ./secret-generator.yaml
